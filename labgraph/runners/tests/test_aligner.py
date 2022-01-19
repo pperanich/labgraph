@@ -3,13 +3,14 @@
 
 import asyncio
 import time
-from typing import List
+from typing import List, Dict, Sequence
 
 import pytest
 
 from ...graphs.graph import Graph
 from ...graphs.group import Connections
 from ...graphs.method import AsyncPublisher, publisher, subscriber
+from ...graphs.module import Module
 from ...graphs.node import Node
 from ...graphs.topic import Topic
 from ...messages.message import TimestampedMessage
@@ -17,6 +18,7 @@ from ...util.testing import local_test
 from ..aligner import TimestampAligner
 from ..exceptions import NormalTermination
 from ..parallel_runner import ParallelRunner
+from ..local_runner import LocalRunner
 from ..runner import RunnerOptions
 
 
@@ -61,9 +63,10 @@ class MySource2(Node):
 class MySink(Node):
     D = Topic(MyMessage1)
     E = Topic(MyMessage2)
+    results : List[float] = []
 
-    def setup(self) -> None:
-        self.results: List[float] = []
+    # def setup(self) -> None:
+    #     self.results: List[float] = []
 
     @subscriber(D)
     def sink1(self, message: MyMessage1) -> None:
@@ -78,7 +81,7 @@ class MySink(Node):
             raise NormalTermination()
 
 
-class MyGraph(Graph):
+class MyGraphLocal(Graph):
     SOURCE1: MySource1
     SOURCE2: MySource2
     SINK: MySink
@@ -87,16 +90,64 @@ class MyGraph(Graph):
         return ((self.SOURCE1.A, self.SINK.D), (self.SOURCE2.A, self.SINK.E))
 
 
+class MyGraphParallel(Graph):
+    SOURCE1: MySource1
+    SOURCE2: MySource2
+    SINK: MySink
+
+    def connections(self) -> Connections:
+        return ((self.SOURCE1.A, self.SINK.D), (self.SOURCE2.A, self.SINK.E))
+
+    def process_modules(self) -> Sequence[Module]:
+        return (self.SOURCE1, self.SOURCE2, self.SINK)
+
+
 @local_test
 @pytest.mark.skip("T70572430: Fix aligner tests")
-def test_slow_align_interval() -> None:
+def test_slow_align_interval_local() -> None:
     """
     Tests that when the default timestamp aligner is specified for a runner
     with insufficient time lag, the results from its streams should arrive in
     expected (not chronological) order.
     """
 
-    graph = MyGraph()
+    graph = MyGraphLocal()
+    aligner = TimestampAligner(SMALL_ALIGN_LAG)
+    runner = LocalRunner(module=graph, options=RunnerOptions(aligner=aligner))
+    runner.run()
+
+    assert len(graph.SINK.results) == NUM_MESSAGES * 2
+    assert graph.SINK.results != sorted(graph.SINK.results)
+
+
+@local_test
+@pytest.mark.skip("T70572430: Fix aligner tests")
+def test_align_two_streams_local() -> None:
+    """
+    Tests that when the default timestamp aligner is specified for a runner
+    with sufficient time lag, the results from all its streams should arrive
+    in chronological order.
+    """
+
+    graph = MyGraphLocal()
+    aligner = TimestampAligner(LARGE_ALIGN_LAG)
+    runner = LocalRunner(module=graph, options=RunnerOptions(aligner=aligner))
+    runner.run()
+
+    assert len(graph.SINK.results) == NUM_MESSAGES * 2
+    assert graph.SINK.results == sorted(graph.SINK.results)
+
+
+@local_test
+@pytest.mark.skip("T70572430: Fix aligner tests")
+def test_slow_align_interval_parallel() -> None:
+    """
+    Tests that when the default timestamp aligner is specified for a runner
+    with insufficient time lag, the results from its streams should arrive in
+    expected (not chronological) order.
+    """
+
+    graph = MyGraphParallel()
     aligner = TimestampAligner(SMALL_ALIGN_LAG)
     runner = ParallelRunner(graph=graph, options=RunnerOptions(aligner=aligner))
     runner.run()
@@ -107,14 +158,14 @@ def test_slow_align_interval() -> None:
 
 @local_test
 @pytest.mark.skip("T70572430: Fix aligner tests")
-def test_align_two_streams() -> None:
+def test_align_two_streams_parallel() -> None:
     """
     Tests that when the default timestamp aligner is specified for a runner
     with sufficient time lag, the results from all its streams should arrive
     in chronological order.
     """
 
-    graph = MyGraph()
+    graph = MyGraphParallel()
     aligner = TimestampAligner(LARGE_ALIGN_LAG)
     runner = ParallelRunner(graph=graph, options=RunnerOptions(aligner=aligner))
     runner.run()

@@ -18,7 +18,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-18.04, windows-latest, macos-10.15]
+        config: 
+        - {
+            name: "MacOS Latest, Clang",
+            os: macos-latest,
+            cc: "clang", cxx: "clang++"
+          }
+        - {
+            name: "Ubuntu Latest, GCC",
+            os: ubuntu-latest,
+            cc: "gcc", cxx: "g++"
+          }
+        - {
+            name: "Windows Latest, MSVC",
+            os: windows-latest,
+            cc: "cl", cxx: "cl",
+            environment_script: "C:/Program Files (x86)/Microsoft Visual 
+tudio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
+          }
         cibw_archs: ["auto"]
         include: 
           - os: ubuntu-18.04

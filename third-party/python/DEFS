@@ -50,3 +50,5 @@ PYTHON_STATIC_LIB_PATH = PYTHON_STATIC_LIB_DIR + os.sep + PYTHON_STATIC_LIB_FILE
 
 PYTHON_INCLUDE_DIR = config_var("INCLUDEPY")
 
+if platform.system() == "Darwin":
+    os.environ["REPAIR_LIBRARY_PATH"] = PYTHON_SHARED_LIB_PATH
