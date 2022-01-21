@@ -1,7 +1,7 @@
 with allow_unsafe_import():
-    import os, platform, shutil
+    import os, platform, shutil, sys
 
-PYTHON_VERSION = "3.6" # To be modified for other python versions.
+PYTHON_VERSION = str(sys.version_info[0]) + '.' + str(sys.version_info[1])
 
 
 def _config_var(executable, key):
@@ -49,6 +49,3 @@ PYTHON_STATIC_LIB_FILENAME = "python" + PYTHON_VERSION.replace(".", "") + ".lib"
 PYTHON_STATIC_LIB_PATH = PYTHON_STATIC_LIB_DIR + os.sep + PYTHON_STATIC_LIB_FILENAME
 
 PYTHON_INCLUDE_DIR = config_var("INCLUDEPY")
-
-if platform.system() == "Darwin":
-    os.environ["REPAIR_LIBRARY_PATH"] = PYTHON_SHARED_LIB_PATH

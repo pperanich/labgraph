@@ -4,4 +4,3 @@ brew update && brew upgrade
 brew install watchman ant buck
 mv /usr/local/Cellar/buck/2021.01.12.01_1/ /usr/local/Cellar/buck/2021.01.12.01
 brew link buck
-
