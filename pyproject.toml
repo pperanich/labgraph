@@ -1,7 +1,7 @@
 [project]
 requires-python = ">=3.6"
 
-# [tool.cibuildwheel]
+[tool.cibuildwheel]
 # # Install pytest before running CIBW_TEST_COMMAND
 # test-requires = "pytest"
 # # Run the project tests against the installed wheel using `nose`
