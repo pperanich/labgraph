@@ -9,8 +9,8 @@ requires-python = ">=3.6"
 
 # Increase pip debugging output
 build-verbosity = 2
-build = ["cp36-*", "cp37-*", "cp38-*", "cp39-*", "cp310-*"]
-skip = ["pp*", "*-win32"]
+build = ["cp36-*", "cp37-*", "cp38-*", "cp39-*"]
+skip = ["pp*", "*-win32", "cp310-*"]
 manylinux-x86_64-image = "pperanich/manylinux2014_x86_64_pic:latest"
 manylinux-i686-image= "pperanich/manylinux2014_i686_pic:latest"
 
