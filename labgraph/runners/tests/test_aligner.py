@@ -3,6 +3,8 @@
 
 import asyncio
 import time
+import json
+import os
 from typing import List, Dict, Sequence
 
 import pytest
@@ -13,8 +15,9 @@ from ...graphs.method import AsyncPublisher, publisher, subscriber
 from ...graphs.module import Module
 from ...graphs.node import Node
 from ...graphs.topic import Topic
+from ...graphs.config import Config
 from ...messages.message import TimestampedMessage
-from ...util.testing import local_test
+from ...util.testing import get_test_filename, local_test
 from ..aligner import TimestampAligner
 from ..exceptions import NormalTermination
 from ..parallel_runner import ParallelRunner
@@ -28,6 +31,8 @@ SLOW_PUBLISH_RATE = 1
 
 SMALL_ALIGN_LAG = 0.01
 LARGE_ALIGN_LAG = 5
+
+OUTPUT_FILENAME = get_test_filename("json")
 
 
 class MyMessage1(TimestampedMessage):
@@ -60,40 +65,44 @@ class MySource2(Node):
             await asyncio.sleep(1 / FAST_PUBLISH_RATE)
 
 
+class MySinkConfig(Config):
+    output_filename: str
+
+
 class MySink(Node):
     D = Topic(MyMessage1)
     E = Topic(MyMessage2)
-    results : List[float] = []
+    config: MySinkConfig
 
-    # def setup(self) -> None:
-    #     self.results: List[float] = []
+    def setup(self) -> None:
+        self.messages_seen: int = 0
 
     @subscriber(D)
     def sink1(self, message: MyMessage1) -> None:
-        self.results.append(message.timestamp)
-        if len(self.results) == 2 * NUM_MESSAGES:
-            raise NormalTermination()
+        with open(self.config.output_filename, "a") as output_file:
+            output_file.write(json.dumps(message.asdict()) + "\n")
+            self.messages_seen += 1
+            if self.messages_seen == 2 * NUM_MESSAGES:
+                raise NormalTermination()
 
     @subscriber(E)
     def sink2(self, message: MyMessage2) -> None:
-        self.results.append(message.timestamp)
-        if len(self.results) == 2 * NUM_MESSAGES:
-            raise NormalTermination()
+        with open(self.config.output_filename, "a") as output_file:
+            output_file.write(json.dumps(message.asdict()) + "\n")
+            self.messages_seen += 1
+            if self.messages_seen == 2* NUM_MESSAGES:
+                raise NormalTermination()
 
 
-class MyGraphLocal(Graph):
+class MyGraph(Graph):
     SOURCE1: MySource1
     SOURCE2: MySource2
     SINK: MySink
 
-    def connections(self) -> Connections:
-        return ((self.SOURCE1.A, self.SINK.D), (self.SOURCE2.A, self.SINK.E))
+    config: MySinkConfig
 
-
-class MyGraphParallel(Graph):
-    SOURCE1: MySource1
-    SOURCE2: MySource2
-    SINK: MySink
+    def setup(self) -> None:
+        self.SINK.configure(self.config)
 
     def connections(self) -> Connections:
         return ((self.SOURCE1.A, self.SINK.D), (self.SOURCE2.A, self.SINK.E))
@@ -103,72 +112,46 @@ class MyGraphParallel(Graph):
 
 
 @local_test
-@pytest.mark.skip("T70572430: Fix aligner tests")
-def test_slow_align_interval_local() -> None:
+def test_slow_align_interval() -> None:
     """
     Tests that when the default timestamp aligner is specified for a runner
     with insufficient time lag, the results from its streams should arrive in
     expected (not chronological) order.
     """
 
-    graph = MyGraphLocal()
+    graph = MyGraph(MySinkConfig(output_filename=OUTPUT_FILENAME))
     aligner = TimestampAligner(SMALL_ALIGN_LAG)
-    runner = LocalRunner(module=graph, options=RunnerOptions(aligner=aligner))
+    runner = ParallelRunner(graph=graph, options=RunnerOptions(aligner=aligner))
     runner.run()
 
-    assert len(graph.SINK.results) == NUM_MESSAGES * 2
-    assert graph.SINK.results != sorted(graph.SINK.results)
+    results = []
+    with open(OUTPUT_FILENAME, "r") as output_file:
+        lines = output_file.readlines()
+        for line in lines:
+            results.append(json.loads(line)["int_field"])
+    os.remove(OUTPUT_FILENAME)
+    assert len(results) == NUM_MESSAGES * 2
+    assert results != sorted(results, reverse=True)
 
 
 @local_test
-@pytest.mark.skip("T70572430: Fix aligner tests")
-def test_align_two_streams_local() -> None:
+def test_align_two_streams() -> None:
     """
     Tests that when the default timestamp aligner is specified for a runner
     with sufficient time lag, the results from all its streams should arrive
     in chronological order.
     """
 
-    graph = MyGraphLocal()
-    aligner = TimestampAligner(LARGE_ALIGN_LAG)
-    runner = LocalRunner(module=graph, options=RunnerOptions(aligner=aligner))
-    runner.run()
-
-    assert len(graph.SINK.results) == NUM_MESSAGES * 2
-    assert graph.SINK.results == sorted(graph.SINK.results)
-
-
-@local_test
-@pytest.mark.skip("T70572430: Fix aligner tests")
-def test_slow_align_interval_parallel() -> None:
-    """
-    Tests that when the default timestamp aligner is specified for a runner
-    with insufficient time lag, the results from its streams should arrive in
-    expected (not chronological) order.
-    """
-
-    graph = MyGraphParallel()
-    aligner = TimestampAligner(SMALL_ALIGN_LAG)
-    runner = ParallelRunner(graph=graph, options=RunnerOptions(aligner=aligner))
-    runner.run()
-
-    assert len(graph.SINK.results) == NUM_MESSAGES * 2
-    assert graph.SINK.results != sorted(graph.SINK.results)
-
-
-@local_test
-@pytest.mark.skip("T70572430: Fix aligner tests")
-def test_align_two_streams_parallel() -> None:
-    """
-    Tests that when the default timestamp aligner is specified for a runner
-    with sufficient time lag, the results from all its streams should arrive
-    in chronological order.
-    """
-
-    graph = MyGraphParallel()
+    graph = MyGraph(MySinkConfig(output_filename=OUTPUT_FILENAME))
     aligner = TimestampAligner(LARGE_ALIGN_LAG)
     runner = ParallelRunner(graph=graph, options=RunnerOptions(aligner=aligner))
     runner.run()
 
-    assert len(graph.SINK.results) == NUM_MESSAGES * 2
-    assert graph.SINK.results == sorted(graph.SINK.results)
+    results = []
+    with open(OUTPUT_FILENAME, "r") as output_file:
+        lines = output_file.readlines()
+        for line in lines:
+            results.append(json.loads(line)["int_field"])
+    os.remove(OUTPUT_FILENAME)
+    assert len(results) == NUM_MESSAGES * 2
+    assert results == sorted(results, reverse=True)
